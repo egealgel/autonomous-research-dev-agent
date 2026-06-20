@@ -5,19 +5,17 @@ from anthropic import Anthropic
 from app.config import settings
 from app.pricing import cost_usd
 
-
-def _get_client() -> Anthropic:
-    if not settings.anthropic_api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not configured. Set it in backend/.env"
-        )
-    return Anthropic(api_key=settings.anthropic_api_key)
-
 SYSTEM_PROMPT = (
     "You are an autonomous research and development assistant. "
     "When given a task, produce a thorough, well-structured Markdown response. "
     "Cite reasoning. If asked to summarize a URL, work from your knowledge or ask for the content if missing."
 )
+
+
+def _get_client() -> Anthropic:
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not configured. Set it in backend/.env")
+    return Anthropic(api_key=settings.anthropic_api_key)
 
 
 @dataclass
@@ -32,12 +30,12 @@ class ClaudeResult:
     raw: dict
 
 
-def run_task(prompt: str, *, max_tokens: int = 4096) -> ClaudeResult:
+def run_task_with_system(prompt: str, *, system: str, max_tokens: int = 4096) -> ClaudeResult:
     client = _get_client()
     response = client.messages.create(
         model=settings.anthropic_model,
         max_tokens=max_tokens,
-        system=SYSTEM_PROMPT,
+        system=system,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -66,3 +64,7 @@ def run_task(prompt: str, *, max_tokens: int = 4096) -> ClaudeResult:
         model=settings.anthropic_model,
         raw=response.model_dump(mode="json"),
     )
+
+
+def run_task(prompt: str, *, max_tokens: int = 4096) -> ClaudeResult:
+    return run_task_with_system(prompt, system=SYSTEM_PROMPT, max_tokens=max_tokens)

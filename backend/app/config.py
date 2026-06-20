@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     database_url: str = "postgresql+psycopg://arda:arda_dev@localhost:5432/arda"
+    redis_url: str = "redis://localhost:6379/0"
     storage_path: Path = Path("../storage")
     monthly_budget_usd: float = 20.0
 
