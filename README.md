@@ -16,7 +16,7 @@ storage/    Lokal artifact storage (S3 yerine, gitignored)
 
 - **Aşama 1** — Tek görev uçtan uca: `/task` → Claude → DB + storage
 - **Aşama 2** — Araştırma ajanı: web scraping, GitHub, RAG (Pinecone/pgvector)
-- **Aşama 3** — Kod ajanı: Lambda sandbox'ta kod üret + çalıştır + düzelt
+- **Aşama 3** — Plan ajanı: araştırma sonuçlarından roadmap / research plan / PRD üretir
 - **Aşama 4** — Orkestratör + React dashboard + EventBridge zamanlama
 
 ## Geliştirme
