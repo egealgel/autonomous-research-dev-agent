@@ -3,9 +3,10 @@
 > Bir görev tanımla. Sistem URL'leri tarar, vektör hafızaya yazar, Claude Sonnet 4.6 ile detaylı roadmap, PRD veya araştırma planı üretir.
 
 Multi-agent stack: bir backend (FastAPI + Claude + Postgres + pgvector + Redis/RQ) + animasyonlu bir React dashboard (Framer Motion + Lenis + TanStack Query).
-<img width="1457" height="786" alt="Ekran Resmi 2026-06-20 22 40 11" src="https://github.com/user-attachments/assets/3c465621-1b7c-4e7b-8b7c-ac619cba2ff2" />
-<img width="1457" height="786" alt="Ekran Resmi 2026-06-20 22 39 58" src="https://github.com/user-attachments/assets/f8219c56-3b60-4638-b6f0-7726985aef0b" />
 <img width="1457" height="786" alt="Ekran Resmi 2026-06-20 22 39 49" src="https://github.com/user-attachments/assets/b4506731-d91b-4a35-80ed-321c7d403757" />
+<img width="1457" height="786" alt="Ekran Resmi 2026-06-20 22 39 58" src="https://github.com/user-attachments/assets/f8219c56-3b60-4638-b6f0-7726985aef0b" />
+<img width="1457" height="786" alt="Ekran Resmi 2026-06-20 22 40 11" src="https://github.com/user-attachments/assets/3c465621-1b7c-4e7b-8b7c-ac619cba2ff2" />
+
 
 
 ## Monorepo Yapısı
