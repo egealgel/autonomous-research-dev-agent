@@ -54,6 +54,8 @@ export interface CreatePlanPayload {
   prompt: string;
   plan_type: PlanType;
   urls?: string[];
+  images?: File[];
+  texts?: File[];
 }
 
 export interface TaskAccepted {
@@ -84,8 +86,26 @@ export const apiClient = {
   getPlan: (id: string) =>
     api.get<TaskRecord>(`/plan/${id}`).then((r) => r.data),
 
-  createPlan: (payload: CreatePlanPayload) =>
-    api.post<TaskAccepted>("/plan", payload).then((r) => r.data),
+  createPlan: (payload: CreatePlanPayload) => {
+    const form = new FormData();
+    form.append("prompt", payload.prompt);
+    form.append("plan_type", payload.plan_type);
+    form.append("urls", JSON.stringify(payload.urls ?? []));
+    for (const img of payload.images ?? []) {
+      form.append("images", img, img.name);
+    }
+    for (const txt of payload.texts ?? []) {
+      form.append("texts", txt, txt.name);
+    }
+    return api
+      .post<TaskAccepted>("/plan", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
+
+  uploadUrl: (taskId: string, filename: string) =>
+    `/api/plan/${taskId}/uploads/${encodeURIComponent(filename)}`,
 
   usage: () =>
     api.get<MonthlyUsage>("/usage/current-month").then((r) => r.data),

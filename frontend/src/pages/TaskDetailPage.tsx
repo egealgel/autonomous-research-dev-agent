@@ -23,6 +23,18 @@ interface HitInfo {
   similarity: number;
 }
 
+interface AttachedImage {
+  filename: string;
+  media_type: string;
+  storage_key: string;
+}
+
+interface AttachedTextDoc {
+  filename: string;
+  storage_key: string;
+  inline: boolean;
+}
+
 export function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const taskId = id!;
@@ -57,6 +69,8 @@ export function TaskDetailPage() {
   const params = (data.params ?? {}) as Record<string, unknown>;
   const sources = (params.sources ?? []) as SourceInfo[];
   const hits = (params.hits_used ?? []) as HitInfo[];
+  const attachedImages = (params.attached_images ?? []) as AttachedImage[];
+  const attachedTextDocs = (params.attached_text_docs ?? []) as AttachedTextDoc[];
   const planType = params.plan_type as string | undefined;
   const isRunning = data.status === "running" || data.status === "pending";
 
@@ -89,6 +103,72 @@ export function TaskDetailPage() {
         </div>
         <h1 className="font-display text-3xl font-bold leading-tight">{data.prompt}</h1>
       </motion.div>
+
+      {attachedImages.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.08, ease: easing }}
+          className="glass rounded-xl p-5"
+        >
+          <div className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-3">
+            Attached images ({attachedImages.length})
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {attachedImages.map((img) => (
+              <a
+                key={img.storage_key}
+                href={apiClient.uploadUrl(taskId, img.filename)}
+                target="_blank"
+                rel="noreferrer"
+                className="group block glass rounded-lg overflow-hidden hover:scale-[1.02] transition-transform duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]"
+              >
+                <div className="aspect-video bg-black/40 overflow-hidden">
+                  <img
+                    src={apiClient.uploadUrl(taskId, img.filename)}
+                    alt={img.filename}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="px-3 py-2 text-xs">
+                  <div className="truncate font-mono">{img.filename}</div>
+                  <div className="text-[var(--color-text-muted)] mt-0.5">{img.media_type}</div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {attachedTextDocs.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.09, ease: easing }}
+          className="glass rounded-xl p-5"
+        >
+          <div className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-3">
+            Attached docs ({attachedTextDocs.length})
+          </div>
+          <ul className="space-y-2 text-sm">
+            {attachedTextDocs.map((doc) => (
+              <li key={doc.storage_key} className="flex items-center justify-between gap-2">
+                <a
+                  href={apiClient.uploadUrl(taskId, doc.filename)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--color-accent-cyan)] hover:underline truncate"
+                >
+                  📄 {doc.filename}
+                </a>
+                <span className="text-xs font-mono text-[var(--color-text-muted)] whitespace-nowrap">
+                  {doc.inline ? "inline (<8KB)" : "via RAG"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
 
       {sources.length > 0 && (
         <motion.div

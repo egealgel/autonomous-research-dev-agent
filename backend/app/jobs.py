@@ -6,6 +6,8 @@ from app.agents.research import run_research
 from app.db import SessionLocal
 from app.models import Task, TaskStatus, UsageLog
 from app.storage import new_artifact_key, storage
+from app.tools.image import ImageAttachment, validate_image
+from app.tools.text_doc import TextDocument, validate_text_doc
 
 
 def process_research_task(task_id: str) -> None:
@@ -85,6 +87,22 @@ def process_plan_task(task_id: str) -> None:
         plan_type = PlanType(params.get("plan_type", PlanType.software_roadmap))
         urls: list[str] = params.get("urls", []) or []
 
+        attached_images: list[ImageAttachment] = []
+        for ref in params.get("attached_images", []) or []:
+            data = storage.read_binary(ref["storage_key"])
+            attached_images.append(
+                validate_image(
+                    data,
+                    filename=ref["filename"],
+                    content_type=ref.get("media_type"),
+                )
+            )
+
+        attached_text_docs: list[TextDocument] = []
+        for ref in params.get("attached_text_docs", []) or []:
+            data = storage.read_binary(ref["storage_key"])
+            attached_text_docs.append(validate_text_doc(data, filename=ref["filename"]))
+
         try:
             outcome = run_plan(
                 db,
@@ -92,6 +110,8 @@ def process_plan_task(task_id: str) -> None:
                 prompt=task.prompt,
                 plan_type=plan_type,
                 urls=urls,
+                text_docs=attached_text_docs,
+                images=attached_images,
             )
         except Exception as exc:
             task.status = TaskStatus.failed

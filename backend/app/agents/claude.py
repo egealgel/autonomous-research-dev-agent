@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from anthropic import Anthropic
 
@@ -30,13 +31,18 @@ class ClaudeResult:
     raw: dict
 
 
-def run_task_with_system(prompt: str, *, system: str, max_tokens: int = 4096) -> ClaudeResult:
+def run_messages(
+    *,
+    system: str,
+    content: str | list[dict[str, Any]],
+    max_tokens: int = 4096,
+) -> ClaudeResult:
     client = _get_client()
     response = client.messages.create(
         model=settings.anthropic_model,
         max_tokens=max_tokens,
         system=system,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": content}],
     )
 
     text_parts = [block.text for block in response.content if block.type == "text"]
@@ -66,5 +72,9 @@ def run_task_with_system(prompt: str, *, system: str, max_tokens: int = 4096) ->
     )
 
 
+def run_task_with_system(prompt: str, *, system: str, max_tokens: int = 4096) -> ClaudeResult:
+    return run_messages(system=system, content=prompt, max_tokens=max_tokens)
+
+
 def run_task(prompt: str, *, max_tokens: int = 4096) -> ClaudeResult:
-    return run_task_with_system(prompt, system=SYSTEM_PROMPT, max_tokens=max_tokens)
+    return run_messages(system=SYSTEM_PROMPT, content=prompt, max_tokens=max_tokens)

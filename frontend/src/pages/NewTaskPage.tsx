@@ -1,8 +1,19 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient, type PlanType } from "@/lib/api";
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const ACCEPTED_TEXT_TYPES = ["text/plain", "text/markdown", ""];
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
 
 const easing: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
@@ -56,6 +67,52 @@ export function NewTaskPage() {
   const [planType, setPlanType] = useState<PlanType>("software_roadmap");
   const [prompt, setPrompt] = useState("");
   const [urlsRaw, setUrlsRaw] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [texts, setTexts] = useState<File[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+
+  const addImages = (files: FileList | File[]) => {
+    setUploadError(null);
+    const incoming = Array.from(files);
+    const rejected: string[] = [];
+    const accepted: File[] = [];
+    for (const f of incoming) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(f.type) && !/\.(png|jpe?g|webp|gif)$/i.test(f.name)) {
+        rejected.push(`${f.name} (format desteklenmiyor)`);
+        continue;
+      }
+      if (f.size > MAX_IMAGE_BYTES) {
+        rejected.push(`${f.name} (${formatBytes(f.size)} > 5 MB)`);
+        continue;
+      }
+      accepted.push(f);
+    }
+    if (rejected.length) setUploadError(`Reddedildi: ${rejected.join(", ")}`);
+    setImages((prev) => [...prev, ...accepted]);
+  };
+
+  const addTexts = (files: FileList | File[]) => {
+    setUploadError(null);
+    const incoming = Array.from(files);
+    const rejected: string[] = [];
+    const accepted: File[] = [];
+    for (const f of incoming) {
+      if (!ACCEPTED_TEXT_TYPES.includes(f.type) && !/\.(txt|md|markdown)$/i.test(f.name)) {
+        rejected.push(`${f.name} (yalnızca .txt/.md)`);
+        continue;
+      }
+      if (f.size > MAX_TEXT_BYTES) {
+        rejected.push(`${f.name} (${formatBytes(f.size)} > 2 MB)`);
+        continue;
+      }
+      accepted.push(f);
+    }
+    if (rejected.length) setUploadError(`Reddedildi: ${rejected.join(", ")}`);
+    setTexts((prev) => [...prev, ...accepted]);
+  };
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -71,7 +128,13 @@ export function NewTaskPage() {
         const accepted = await apiClient.createResearch({ prompt, urls });
         return { id: accepted.task_id };
       }
-      const accepted = await apiClient.createPlan({ prompt, plan_type: planType, urls });
+      const accepted = await apiClient.createPlan({
+        prompt,
+        plan_type: planType,
+        urls,
+        images,
+        texts,
+      });
       return { id: accepted.task_id };
     },
     onSuccess: (data) => {
@@ -237,6 +300,136 @@ export function NewTaskPage() {
                 </div>
               )}
 
+              {activeAgent.kind === "plan" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+                      Görseller (opsiyonel)
+                    </label>
+                    <div
+                      onClick={() => imageInputRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add("ring-2", "ring-indigo-500/60");
+                      }}
+                      onDragLeave={(e) => {
+                        e.currentTarget.classList.remove("ring-2", "ring-indigo-500/60");
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("ring-2", "ring-indigo-500/60");
+                        if (e.dataTransfer.files) addImages(e.dataTransfer.files);
+                      }}
+                      className="glass rounded-lg p-4 text-center cursor-pointer hover:bg-white/[0.06] transition-all duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] border border-dashed border-white/10"
+                    >
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        multiple
+                        accept=".png,.jpg,.jpeg,.webp,.gif,image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files) addImages(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <div className="text-sm font-medium">Drop or click</div>
+                      <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                        PNG/JPG/WebP/GIF · max 5 MB
+                      </div>
+                    </div>
+                    {images.length > 0 && (
+                      <ul className="space-y-1.5">
+                        {images.map((f, i) => (
+                          <li
+                            key={`${f.name}-${i}`}
+                            className="flex items-center justify-between gap-2 glass rounded-md px-3 py-2 text-xs"
+                          >
+                            <span className="truncate">📎 {f.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[var(--color-text-muted)] font-mono">{formatBytes(f.size)}</span>
+                              <button
+                                onClick={() => setImages((p) => p.filter((_, idx) => idx !== i))}
+                                className="text-[var(--color-text-muted)] hover:text-rose-400 transition-colors"
+                                aria-label="Remove"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+                      Metin dosyaları (opsiyonel)
+                    </label>
+                    <div
+                      onClick={() => textInputRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add("ring-2", "ring-indigo-500/60");
+                      }}
+                      onDragLeave={(e) => {
+                        e.currentTarget.classList.remove("ring-2", "ring-indigo-500/60");
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("ring-2", "ring-indigo-500/60");
+                        if (e.dataTransfer.files) addTexts(e.dataTransfer.files);
+                      }}
+                      className="glass rounded-lg p-4 text-center cursor-pointer hover:bg-white/[0.06] transition-all duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] border border-dashed border-white/10"
+                    >
+                      <input
+                        ref={textInputRef}
+                        type="file"
+                        multiple
+                        accept=".txt,.md,.markdown,text/plain,text/markdown"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files) addTexts(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <div className="text-sm font-medium">Drop or click</div>
+                      <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                        .txt / .md · max 2 MB · &lt;8KB inline, üstü RAG
+                      </div>
+                    </div>
+                    {texts.length > 0 && (
+                      <ul className="space-y-1.5">
+                        {texts.map((f, i) => (
+                          <li
+                            key={`${f.name}-${i}`}
+                            className="flex items-center justify-between gap-2 glass rounded-md px-3 py-2 text-xs"
+                          >
+                            <span className="truncate">📄 {f.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[var(--color-text-muted)] font-mono">{formatBytes(f.size)}</span>
+                              <button
+                                onClick={() => setTexts((p) => p.filter((_, idx) => idx !== i))}
+                                className="text-[var(--color-text-muted)] hover:text-rose-400 transition-colors"
+                                aria-label="Remove"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="glass rounded-lg p-3 border border-amber-500/40 bg-amber-500/10 text-amber-200 text-xs">
+                  {uploadError}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   onClick={goNext}
@@ -297,6 +490,26 @@ export function NewTaskPage() {
                     <ul className="text-sm font-mono text-[var(--color-accent-cyan)] space-y-1">
                       {urlsList.map((u) => (
                         <li key={u} className="truncate">{u}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {images.length > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Görseller ({images.length})</div>
+                    <ul className="text-sm space-y-1">
+                      {images.map((f, i) => (
+                        <li key={`${f.name}-${i}`} className="font-mono truncate text-[var(--color-text-secondary)]">📎 {f.name} <span className="text-[var(--color-text-muted)]">· {formatBytes(f.size)}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {texts.length > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Metinler ({texts.length})</div>
+                    <ul className="text-sm space-y-1">
+                      {texts.map((f, i) => (
+                        <li key={`${f.name}-${i}`} className="font-mono truncate text-[var(--color-text-secondary)]">📄 {f.name} <span className="text-[var(--color-text-muted)]">· {formatBytes(f.size)}</span></li>
                       ))}
                     </ul>
                   </div>

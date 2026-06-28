@@ -1,12 +1,15 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.agents.claude import ClaudeResult, run_task_with_system
+from app.agents.claude import ClaudeResult, run_messages
 from app.agents.research import IngestedSource, ingest_url
-from app.rag import SearchHit, search
+from app.rag import SearchHit, search, store_chunks
+from app.tools.image import ImageAttachment
+from app.tools.text_doc import TextDocument, doc_chunks
 
 
 class PlanType(StrEnum):
@@ -151,6 +154,8 @@ class PlanOutcome:
     sources: list[IngestedSource]
     hits: list[SearchHit]
     claude: ClaudeResult
+    inline_docs: list[str] = field(default_factory=list)
+    image_filenames: list[str] = field(default_factory=list)
 
 
 def _build_context(hits: list[SearchHit]) -> str:
@@ -161,6 +166,31 @@ def _build_context(hits: list[SearchHit]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def _ingest_text_doc(
+    db: Session,
+    task_id: uuid.UUID,
+    doc: TextDocument,
+) -> IngestedSource | None:
+    if doc.inline:
+        return None
+    chunks = doc_chunks(doc)
+    store_chunks(
+        db,
+        task_id=task_id,
+        source_url=f"upload://{doc.filename}",
+        source_type="upload_text",
+        chunks=chunks,
+        meta={"filename": doc.filename, "inline": False},
+    )
+    return IngestedSource(
+        url=f"upload://{doc.filename}",
+        source_type="upload_text",
+        title=doc.filename,
+        chunks_stored=len(chunks),
+        meta={"filename": doc.filename},
+    )
+
+
 def run_plan(
     db: Session,
     task_id: uuid.UUID,
@@ -168,24 +198,54 @@ def run_plan(
     prompt: str,
     plan_type: PlanType,
     urls: list[str] | None = None,
+    text_docs: list[TextDocument] | None = None,
+    images: list[ImageAttachment] | None = None,
     max_tokens: int = 6144,
 ) -> PlanOutcome:
     urls = urls or []
-    sources: list[IngestedSource] = []
-    hits: list[SearchHit] = []
+    text_docs = text_docs or []
+    images = images or []
 
-    if urls:
-        sources = [ingest_url(db, task_id, url) for url in urls]
+    sources: list[IngestedSource] = []
+    for url in urls:
+        sources.append(ingest_url(db, task_id, url))
+
+    inline_docs: list[str] = []
+    for doc in text_docs:
+        ingested = _ingest_text_doc(db, task_id, doc)
+        if ingested:
+            sources.append(ingested)
+        else:
+            inline_docs.append(f"### {doc.filename}\n{doc.content}")
+
+    if urls or any(s.source_type == "upload_text" for s in sources):
         db.flush()
         hits = search(db, prompt, task_id=task_id, limit=8)
-
-    if hits:
-        context = _build_context(hits)
-        user_message = f"CONTEXT:\n{context}\n\n---\nTASK:\n{prompt}"
     else:
-        user_message = f"TASK:\n{prompt}"
+        hits = []
+
+    parts: list[str] = []
+    if hits:
+        parts.append(f"CONTEXT (retrieved via RAG):\n{_build_context(hits)}")
+    if inline_docs:
+        parts.append("INLINE DOCUMENTS:\n\n" + "\n\n---\n\n".join(inline_docs))
+    parts.append(f"TASK:\n{prompt}")
+    text_message = "\n\n---\n\n".join(parts)
+
+    if images:
+        content: list[dict[str, Any]] = [img.to_anthropic_block() for img in images]
+        content.append({"type": "text", "text": text_message})
+    else:
+        content = text_message  # type: ignore[assignment]
 
     system = _PROMPTS[plan_type]
-    claude = run_task_with_system(user_message, system=system, max_tokens=max_tokens)
+    claude = run_messages(system=system, content=content, max_tokens=max_tokens)
 
-    return PlanOutcome(plan_type=plan_type, sources=sources, hits=hits, claude=claude)
+    return PlanOutcome(
+        plan_type=plan_type,
+        sources=sources,
+        hits=hits,
+        claude=claude,
+        inline_docs=[doc.filename for doc in text_docs if doc.inline],
+        image_filenames=[img.filename for img in images],
+    )
